@@ -113,9 +113,12 @@ with aba_resumo:
     saldo_atual = df_ganhos['Pontos'].sum() - df_gastos['Pontos'].sum()
 
     ontem = hoje - timedelta(days=1)
-    inicio_semana = hoje - timedelta(days=hoje.weekday())
-    inicio_mes = hoje.replace(day=1)
-    inicio_ano = hoje.replace(month=1, day=1)
+    
+    # Faz o cálculo para forçar o início da semana sempre no Domingo
+    dias_para_domingo = (hoje.weekday() + 1) % 7
+    inicio_semana = hoje - timedelta(days=dias_para_domingo)
+    
+    inicio_mes = hoje.replace(day=1)=1)
 
     pontos_hoje = df_ganhos[df_ganhos['Data_Logica'] == hoje]['Pontos'].sum()
     pontos_ontem = df_ganhos[df_ganhos['Data_Logica'] == ontem]['Pontos'].sum()
