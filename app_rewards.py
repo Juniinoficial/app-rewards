@@ -112,14 +112,17 @@ with aba_resumo:
 
     saldo_atual = df_ganhos['Pontos'].sum() - df_gastos['Pontos'].sum()
 
+    # Cálculo das datas com as regras de negócio
     ontem = hoje - timedelta(days=1)
     
-    # Faz o cálculo para forçar o início da semana sempre no Domingo
+    # Início da semana sempre no Domingo
     dias_para_domingo = (hoje.weekday() + 1) % 7
     inicio_semana = hoje - timedelta(days=dias_para_domingo)
     
     inicio_mes = hoje.replace(day=1)
+    inicio_ano = hoje.replace(month=1, day=1)
 
+    # Cálculos das métricas
     pontos_hoje = df_ganhos[df_ganhos['Data_Logica'] == hoje]['Pontos'].sum()
     pontos_ontem = df_ganhos[df_ganhos['Data_Logica'] == ontem]['Pontos'].sum()
     pontos_semana = df_ganhos[df_ganhos['Data_Logica'] >= inicio_semana]['Pontos'].sum()
@@ -127,6 +130,7 @@ with aba_resumo:
     pontos_ano = df_ganhos[df_ganhos['Data_Logica'] >= inicio_ano]['Pontos'].sum()
     gastos_mes = df_gastos[df_gastos['Data_Logica'] >= inicio_mes]['Pontos'].sum()
 
+    # Exibição
     col1, col2, col3 = st.columns(3)
     col1.metric("Saldo Atual", f"{saldo_atual:,.0f}".replace(',','.'))
     col2.metric("Equivalente em R$", f"R$ {saldo_atual / TAXA_CONVERSAO:.2f}".replace('.',','))
@@ -145,42 +149,6 @@ with aba_resumo:
     if meta_pontos > 0:
         progresso = min(saldo_atual / meta_pontos, 1.0)
         st.progress(progresso)
-
-    st.divider()
-    
-    # NOVOS GRÁFICOS
-    if not df_ganhos.empty:
-        df_mes_atual = df_ganhos[df_ganhos['Data_Logica'] >= inicio_mes].copy()
-        
-        gcol1, gcol2 = st.columns(2)
-        with gcol1:
-            if not df_mes_atual.empty:
-                df_mes_atual['Origem'] = df_mes_atual['Categoria'].apply(classificar_origem)
-                df_origem = df_mes_atual.groupby('Origem')['Pontos'].sum().reset_index()
-                fig_origem = px.pie(df_origem, values='Pontos', names='Origem', hole=0.5, 
-                                    title="Produtividade: Bing vs Xbox (Este Mês)",
-                                    color='Origem', color_discrete_map={'Bing':'#00a4ef', 'Xbox':'#107c10', 'Outros':'#7f8c8d'})
-                st.plotly_chart(fig_origem, use_container_width=True)
-                
-        with gcol2:
-            df_hoje_grafico = df_ganhos[df_ganhos['Data_Logica'] == hoje]
-            if not df_hoje_grafico.empty:
-                df_cat_hoje = df_hoje_grafico.groupby('Categoria')['Pontos'].sum().reset_index()
-                df_cat_hoje = df_cat_hoje[df_cat_hoje['Pontos'] > 0].sort_values(by='Pontos', ascending=True)
-                fig_hoje = px.bar(df_cat_hoje, x='Pontos', y='Categoria', orientation='h', 
-                                  title="Pontos Feitos Hoje", color_discrete_sequence=['#8a2be2'])
-                st.plotly_chart(fig_hoje, use_container_width=True)
-            else:
-                st.info("Nenhum ponto registrado hoje ainda.")
-
-        st.divider()
-        if not df_mes_atual.empty:
-            df_mes_dia = df_mes_atual.groupby('Data_Logica')['Pontos'].sum().reset_index().sort_values('Data_Logica')
-            fig_evolucao = px.area(df_mes_dia, x='Data_Logica', y='Pontos', markers=True, 
-                                   title="Evolução Diária (Este Mês)", color_discrete_sequence=['#8a2be2'])
-            fig_evolucao.update_xaxes(title="Dia do Mês", tickformat="%d/%m")
-            st.plotly_chart(fig_evolucao, use_container_width=True)
-
 # --- ABA 2: LANÇAR PONTOS ---
 with aba_lancar:
     st.subheader("Lançamento de Ganhos")
