@@ -70,7 +70,8 @@ def enviar_notificacao_ntfy(mensagem, titulo="🎮 Microsoft Rewards"):
     except: pass
 
 df = carregar_dados()
-agora = datetime.now()
+# Puxa a hora universal (UTC) e subtrai 3 horas para forçar o horário de Brasília
+agora = datetime.utcnow() - timedelta(hours=3)
 hoje = obter_data_logica(agora)
 
 st.title("🎮 Painel Microsoft Rewards")
