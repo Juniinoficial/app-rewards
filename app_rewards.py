@@ -6,6 +6,9 @@ import uuid
 import requests
 from streamlit_gsheets import GSheetsConnection
 
+# =====================================================================
+# CONFIGURAÇÕES INICIAIS
+# =====================================================================
 st.set_page_config(page_title="Gestão Microsoft Rewards", layout="wide", page_icon="🎮")
 
 TAXA_CONVERSAO = 172.1
@@ -23,6 +26,9 @@ CATEGORIAS = [
     "COMPRAR JOGOS"
 ]
 
+# =====================================================================
+# FUNÇÕES DE LÓGICA E BANCO DE DADOS
+# =====================================================================
 def obter_data_logica(dt):
     if dt.hour == 0:
         return (dt - timedelta(days=1)).date()
@@ -73,6 +79,7 @@ aba_resumo, aba_lancar, aba_resgatar, aba_historico = st.tabs([
     "📊 Resumo", "➕ Lançar Pontos", "🛍️ Resgates", "⚙️ Histórico"
 ])
 
+# --- ABA 1: RESUMO ---
 with aba_resumo:
     df_ganhos = df[df['Tipo'] == 'Ganho']
     df_gastos = df[df['Tipo'] == 'Gasto']
@@ -128,14 +135,46 @@ with aba_resumo:
             fig = px.pie(df_grafico, values='Pontos', names='Categoria', hole=0.4)
             st.plotly_chart(fig, use_container_width=True)
 
+# --- ABA 2: LANÇAR PONTOS ---
 with aba_lancar:
     st.subheader("Lançamento de Ganhos")
     with st.form("form_ganhos"):
         cols = st.columns(3)
         valores_input = {}
+        
+        # O sistema descobre que dia da semana é hoje (0 = Seg, 5 = Sáb, 6 = Dom)
+        dia_semana = hoje.weekday()
+        
+        # Mapeamento dos valores exatos das sequências (Primeiro valor é sempre 0)
+        sequencias = {
+            "SERIE DE PESQUISA NO BING": [0, 3, 100],
+            "SERIE CONJUNTO DIARIO": [0, 30, 100],
+            "SERIE NAVEGAR NO EDGE": [0, 5, 10, 20, 30, 40, 80, 120],
+            "SERIE APLICATIVO BING": [0, 5, 10, 15, 50],
+            "ACESSAR APP XBOX": [0, 8, 16, 24, 32, 50]
+        }
+
         for i, cat in enumerate(CATEGORIAS):
             with cols[i % 3]:
-                valores_input[cat] = st.number_input(cat, min_value=0, value=0, step=5, key=f"in_{i}")
+                if cat in sequencias:
+                    valores_input[cat] = st.selectbox(
+                        cat, options=sequencias[cat], key=f"in_{i}"
+                    )
+                else:
+                    padrao = 0
+                    if cat == "PESQUISAS BING": padrao = 60
+                    elif cat == "LER E GANHAR":
+                        if dia_semana < 5: padrao = 25     # Segunda a Sexta
+                        elif dia_semana == 5: padrao = 5   # Sábado
+                        else: padrao = 0                   # Domingo
+                    elif cat == "JOGAR JEWEL": padrao = 10
+                    elif cat == "JOGAR NO CONSOLE": padrao = 20
+                    elif cat == "JOGAR NO PC": padrao = 20
+                    elif cat == "JOGAR UM JOGO DO XBOX GAME PASS": padrao = 20
+                    
+                    valores_input[cat] = st.number_input(
+                        cat, min_value=0, value=padrao, step=1, key=f"in_{i}"
+                    )
         
         st.divider()
         valor_gasto_jogos = st.number_input("Valor gasto em jogos na loja (R$) - Opcional", min_value=0.0, value=0.0, step=1.0)
@@ -160,6 +199,7 @@ with aba_lancar:
 
     st.button("🔔 Testar Notificação no Celular", on_click=lambda: enviar_notificacao_ntfy("Alerta funcionando!", "Teste"))
 
+# --- ABA 3: RESGATES ---
 with aba_resgatar:
     st.subheader("Registrar Resgate")
     with st.form("form_gastos"):
@@ -176,6 +216,7 @@ with aba_resgatar:
             st.success("Resgate salvo!")
             st.rerun()
 
+# --- ABA 4: HISTÓRICO ---
 with aba_historico:
     st.subheader("Gerenciar Dados")
     if not df.empty:
