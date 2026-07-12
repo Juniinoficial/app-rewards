@@ -57,9 +57,10 @@ def salvar_dados(df_novo):
          df_save = df_novo.copy()
          df_save['Data_Hora'] = df_save['Data_Hora'].astype(str)
          df_save['Data_Logica'] = df_save['Data_Logica'].astype(str)
-         conn.update(worksheet="Página1", data=df_save)
+         # Tiramos a exigência do nome da aba. Ele vai salvar na primeira que achar!
+         conn.update(data=df_save)
      except Exception as e:
-         st.error(f"Erro ao salvar: {e}")
+         st.error(f"Erro ao salvar no banco de dados: {e}")
 
 def enviar_notificacao_ntfy(mensagem, titulo="🎮 Microsoft Rewards"):
     try:
@@ -140,13 +141,9 @@ with aba_resumo:
 with aba_lancar:
     st.subheader("Lançamento de Ganhos")
     with st.form("form_ganhos"):
-        cols = st.columns(3)
         valores_input = {}
-        
-        # O sistema descobre que dia da semana é hoje (0 = Seg, 5 = Sáb, 6 = Dom)
         dia_semana = hoje.weekday()
         
-        # Mapeamento dos valores exatos das sequências (Primeiro valor é sempre 0)
         sequencias = {
             "SERIE DE PESQUISA NO BING": [0, 3, 100],
             "SERIE CONJUNTO DIARIO": [0, 30, 100],
@@ -155,35 +152,64 @@ with aba_lancar:
             "ACESSAR APP XBOX": [0, 8, 16, 24, 32, 50]
         }
 
-        for i, cat in enumerate(CATEGORIAS):
-            with cols[i % 3]:
+        # Divisão das categorias
+        cat_bing = [
+            "BONUS DE SEQUENCIA", "BONUS BING STAR", "BONUS DE NIVEL",
+            "BONUS DE PESQUISA", "SERIE DE PESQUISA NO BING",
+            "SERIE CONJUNTO DIARIO", "SERIE NAVEGAR NO EDGE",
+            "SERIE APLICATIVO BING", "PESQUISAS BING", "ATIVIDADES",
+            "LER E GANHAR"
+        ]
+        
+        cat_xbox = [
+            "ACESSAR APP XBOX", "JOGAR JEWEL",
+            "JOGAR NO CONSOLE", "BONUS JOGAR NO CONSOLE", "JOGAR NO PC",
+            "BONUS JOGAR NO PC", "JOGAR UM JOGO DO XBOX GAME PASS",
+            "SEQUENCIA SEMANAL DO XBOX GAME PASS", "PACOTE MENSAL - 4 e 8 JOGOS"
+        ]
+
+        # --- SEÇÃO BING ---
+        st.markdown("#### 🌐 Buscas e Painel Bing")
+        cols_b = st.columns(3)
+        for i, cat in enumerate(cat_bing):
+            with cols_b[i % 3]:
                 if cat in sequencias:
-                    valores_input[cat] = st.selectbox(
-                        cat, options=sequencias[cat], key=f"in_{i}"
-                    )
+                    valores_input[cat] = st.selectbox(cat, options=sequencias[cat], key=f"b_{i}")
                 else:
                     padrao = 0
-                    if cat == "PESQUISAS BING": padrao = 60
+                    if cat == "PESQUISAS BING": padrao = 57
                     elif cat == "LER E GANHAR":
-                        if dia_semana < 5: padrao = 25     # Segunda a Sexta
-                        elif dia_semana == 5: padrao = 5   # Sábado
-                        else: padrao = 0                   # Domingo
-                    elif cat == "JOGAR JEWEL": padrao = 10
+                        if dia_semana < 5: padrao = 25
+                        elif dia_semana == 5: padrao = 5
+                        else: padrao = 0
+                    valores_input[cat] = st.number_input(cat, min_value=0, value=padrao, step=1, key=f"b_{i}")
+
+        st.divider()
+        
+        # --- SEÇÃO XBOX ---
+        st.markdown("#### 🎮 Aplicativo Xbox e Game Pass")
+        cols_x = st.columns(3)
+        for i, cat in enumerate(cat_xbox):
+            with cols_x[i % 3]:
+                if cat in sequencias:
+                    valores_input[cat] = st.selectbox(cat, options=sequencias[cat], key=f"x_{i}")
+                else:
+                    padrao = 0
+                    if cat == "JOGAR JEWEL": padrao = 10
                     elif cat == "JOGAR NO CONSOLE": padrao = 20
                     elif cat == "JOGAR NO PC": padrao = 20
                     elif cat == "JOGAR UM JOGO DO XBOX GAME PASS": padrao = 20
-                    
-                    valores_input[cat] = st.number_input(
-                        cat, min_value=0, value=padrao, step=1, key=f"in_{i}"
-                    )
-        
+                    valores_input[cat] = st.number_input(cat, min_value=0, value=padrao, step=1, key=f"x_{i}")
+
         st.divider()
+        st.markdown("#### 🛒 Compras na Loja")
         valor_gasto_jogos = st.number_input("Valor gasto em jogos na loja (R$) - Opcional", min_value=0.0, value=0.0, step=1.0)
         pontos_compra = int((valor_gasto_jogos / 3.0) * 20) if valor_gasto_jogos > 0 else 0
 
         submit = st.form_submit_button("💾 Salvar Pontos do Dia", type="primary")
+        
         if submit:
-            valores_input["COMPRAR JOGOS"] += pontos_compra
+            valores_input["COMPRAR JOGOS"] = pontos_compra
             novos_registros = []
             for cat, pts in valores_input.items():
                 if pts > 0:
@@ -199,7 +225,6 @@ with aba_lancar:
                 st.rerun()
 
     st.button("🔔 Testar Notificação no Celular", on_click=lambda: enviar_notificacao_ntfy("Alerta funcionando!", "Teste"))
-
 # --- ABA 3: RESGATES ---
 with aba_resgatar:
     st.subheader("Registrar Resgate")
