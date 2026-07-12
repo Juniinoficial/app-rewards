@@ -149,7 +149,7 @@ with aba_lancar:
         sequencias = {
             "SERIE DE PESQUISA NO BING": [0, 3, 100],
             "SERIE CONJUNTO DIARIO": [0, 30, 100],
-            "SERIE NAVEGAR NO EDGE": [0, 5, 10, 20, 30, 40, 80, 120],
+            "SERIE NAVEGAR NO EDGE": [0, 5, 10, 20, 30, 40, 80, 100],
             "SERIE APLICATIVO BING": [0, 5, 10, 15, 50],
             "ACESSAR APP XBOX": [0, 8, 16, 24, 32, 50]
         }
