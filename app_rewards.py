@@ -118,7 +118,7 @@ with aba_resumo:
     dias_para_domingo = (hoje.weekday() + 1) % 7
     inicio_semana = hoje - timedelta(days=dias_para_domingo)
     
-    inicio_mes = hoje.replace(day=1)=1)
+    inicio_mes = hoje.replace(day=1)
 
     pontos_hoje = df_ganhos[df_ganhos['Data_Logica'] == hoje]['Pontos'].sum()
     pontos_ontem = df_ganhos[df_ganhos['Data_Logica'] == ontem]['Pontos'].sum()
