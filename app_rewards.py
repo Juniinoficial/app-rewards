@@ -39,7 +39,8 @@ URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1lKTGiEkDZBm4XoQuYFOwv3F5
 
 def carregar_dados():
     try:
-        df = conn.read(spreadsheet=URL_PLANILHA)
+        # Lê a planilha com ttl=0 para garantir dados 100% ao vivo ao atualizar a página
+        df = conn.read(spreadsheet=URL_PLANILHA, ttl=0)
         colunas_esperadas = ['ID', 'Data_Hora', 'Data_Logica', 'Categoria', 'Pontos', 'Tipo', 'Descricao']
         for col in colunas_esperadas:
             if col not in df.columns:
@@ -58,11 +59,14 @@ def salvar_dados(df_novo):
          df_save['Data_Hora'] = df_save['Data_Hora'].astype(str)
          df_save['Data_Logica'] = df_save['Data_Logica'].astype(str)
          
-         # AQUI ESTAVA O ERRO: Faltou avisar a URL exata na hora de atualizar!
+         # Envia os pontos atualizados para a planilha correta
          conn.update(spreadsheet=URL_PLANILHA, data=df_save)
          
+         # Limpa o cache imediatamente após salvar para a tela recarregar sozinha
+         st.cache_data.clear()
      except Exception as e:
          st.error(f"Erro ao salvar no banco de dados: {e}")
+         
 def enviar_notificacao_ntfy(mensagem, titulo="🎮 Microsoft Rewards"):
     try:
         requests.post(f"https://ntfy.sh/{TOPICO_NTFY}",
