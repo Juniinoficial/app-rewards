@@ -14,9 +14,8 @@ st.set_page_config(page_title="Gestão Microsoft Rewards", layout="wide", page_i
 TAXA_CONVERSAO = 172.1
 TOPICO_NTFY = "josimar_rewards_alert_99"
 
-# Divisão exata para o sistema saber o que é de cada plataforma
 cat_bing = [
-    "BONUS DE SEQUENCIA", "BONUS BING STAR", "BONUS DE NIVEL",
+    "BONUS BING STAR", "BONUS DE NIVEL",
     "BONUS DE PESQUISA", "SERIE DE PESQUISA NO BING",
     "SERIE CONJUNTO DIARIO", "SERIE NAVEGAR NO EDGE",
     "SERIE APLICATIVO BING", "PESQUISAS BING", "ATIVIDADES",
@@ -31,23 +30,17 @@ cat_xbox = [
     "COMPRAR JOGOS"
 ]
 
-CATEGORIAS = cat_bing + cat_xbox
-
-sequencias_globais = {
-    "SERIE DE PESQUISA NO BING": [0, 3, 100],
-    "SERIE CONJUNTO DIARIO": [0, 30, 100],
-    "SERIE NAVEGAR NO EDGE": [0, 5, 10, 20, 30, 40, 80, 120],
-    "SERIE APLICATIVO BING": [0, 5, 10, 15, 50],
-    "ACESSAR APP XBOX": [0, 8, 16, 24, 32, 50]
-}
+# "BONUS DE SEQUENCIA" agora é tratado separadamente no formulário
+CATEGORIAS = cat_bing + cat_xbox + ["BONUS DE SEQUENCIA"]
 
 def classificar_origem(cat):
     if cat in cat_bing: return "Bing"
     if cat in cat_xbox: return "Xbox"
+    if cat == "BONUS DE SEQUENCIA": return "Bing" # Ou configure conforme sua preferência
     return "Outros"
 
 # =====================================================================
-# LÓGICA DE DADOS, CACHE E FUSO HORÁRIO
+# LÓGICA DE DADOS, CACHE E MEMÓRIA DE SESSÃO
 # =====================================================================
 def obter_data_logica(dt):
     if dt.hour == 0:
@@ -57,11 +50,11 @@ def obter_data_logica(dt):
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # ⚠️ COLE SUA URL AQUI DENTRO DAS ASPAS
-URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1lKTGiEkDZBm4XoQuYFOwv3F5Si-DCvEv3At5Fyd4EDY/edit?gid=0#gid=0"
+URL_PLANILHA = "COLE_AQUI_A_URL_DA_SUA_PLANILHA_DO_GOOGLE_DRIVE_COM_AS_ASPAS"
 
 def carregar_dados():
     try:
-        df = conn.read(spreadsheet=URL_PLANILHA, ttl=0) # Atualiza ao vivo
+        df = conn.read(spreadsheet=URL_PLANILHA, ttl=0)
         colunas_esperadas = ['ID', 'Data_Hora', 'Data_Logica', 'Categoria', 'Pontos', 'Tipo', 'Descricao']
         for col in colunas_esperadas:
             if col not in df.columns:
@@ -81,22 +74,28 @@ def salvar_dados(df_novo):
          df_save['Data_Hora'] = df_save['Data_Hora'].astype(str)
          df_save['Data_Logica'] = df_save['Data_Logica'].astype(str)
          conn.update(spreadsheet=URL_PLANILHA, data=df_save)
-         st.cache_data.clear() # Limpa a memória para recarregar rápido
+         st.cache_data.clear()
      except Exception as e:
          st.error(f"Erro ao salvar no banco de dados: {e}")
 
 def enviar_notificacao_ntfy(mensagem, titulo="🎮 Microsoft Rewards"):
+    # Timeout adicionado para evitar travamento e queda do app no Streamlit
     try:
         requests.post(f"https://ntfy.sh/{TOPICO_NTFY}",
             data=mensagem.encode('utf-8'),
-            headers={"Title": titulo, "Tags": "video_game,tada"}
+            headers={"Title": titulo, "Tags": "video_game,tada"},
+            timeout=5
         )
-    except: pass
+    except:
+        pass
+
+# Inicialização de variáveis de persistência de tela (Session State)
+if "meta_pontos" not in st.session_state:
+    st.session_state.meta_pontos = 15000
 
 # Fuso horário de Brasília
 agora = datetime.utcnow() - timedelta(hours=3)
 hoje = obter_data_logica(agora)
-
 df = carregar_dados()
 
 st.title("🎮 Painel Microsoft Rewards")
@@ -113,11 +112,8 @@ with aba_resumo:
     saldo_atual = df_ganhos['Pontos'].sum() - df_gastos['Pontos'].sum()
 
     ontem = hoje - timedelta(days=1)
-    
-    # Cálculo para semana começando no domingo
     dias_para_domingo = (hoje.weekday() + 1) % 7
     inicio_semana = hoje - timedelta(days=dias_para_domingo)
-    
     inicio_mes = hoje.replace(day=1)
     inicio_ano = hoje.replace(month=1, day=1)
 
@@ -128,7 +124,6 @@ with aba_resumo:
     pontos_ano = df_ganhos[df_ganhos['Data_Logica'] >= inicio_ano]['Pontos'].sum()
     gastos_mes = df_gastos[df_gastos['Data_Logica'] >= inicio_mes]['Pontos'].sum()
 
-    # Métricas Principais
     col1, col2, col3 = st.columns(3)
     col1.metric("Saldo Atual", f"{saldo_atual:,.0f}".replace(',','.'))
     col2.metric("Equivalente em R$", f"R$ {saldo_atual / TAXA_CONVERSAO:.2f}".replace('.',','))
@@ -143,67 +138,93 @@ with aba_resumo:
     c5.metric("Este Ano", f"{pontos_ano:,.0f}".replace(',','.'))
     
     st.divider()
-    # A 'key' faz o valor ficar salvo mesmo quando a página recarrega
-    meta_pontos = st.number_input("Definir Meta de Saldo (Pontos)", min_value=0, value=15000, step=1000, key="meta_pontos")
+    meta_pontos = st.number_input("Definir Meta de Saldo (Pontos)", min_value=0, value=st.session_state.meta_pontos, step=1000, key="meta_input")
+    st.session_state.meta_pontos = meta_pontos
     if meta_pontos > 0:
         progresso = min(saldo_atual / meta_pontos, 1.0)
         st.progress(progresso)
 
     st.divider()
     
-    # NOVOS GRÁFICOS
     if not df_ganhos.empty:
         df_mes_atual = df_ganhos[df_ganhos['Data_Logica'] >= inicio_mes].copy()
         
         gcol1, gcol2 = st.columns(2)
         with gcol1:
-            if not df_mes_atual.empty:
-                df_mes_atual['Origem'] = df_mes_atual['Categoria'].apply(classificar_origem)
-                df_origem = df_mes_atual.groupby('Origem')['Pontos'].sum().reset_index()
-                fig_origem = px.pie(df_origem, values='Pontos', names='Origem', hole=0.5, 
-                                    title="Produtividade: Bing vs Xbox (Este Mês)",
-                                    color='Origem', color_discrete_map={'Bing':'#00a4ef', 'Xbox':'#107c10', 'Outros':'#7f8c8d'})
-                st.plotly_chart(fig_origem, use_container_width=True)
+            # 3. Gráfico Xbox vs Bing Todo o Tempo (Sem contabilizar saldo inicial / outros)
+            df_historico_plataforma = df_ganhos[df_ganhos['Categoria'].isin(CATEGORIAS)].copy()
+            if not df_historico_plataforma.empty:
+                df_historico_plataforma['Origem'] = df_historico_plataforma['Categoria'].apply(classificar_origem)
+                df_total_plataforma = df_historico_plataforma.groupby('Origem')['Pontos'].sum().reset_index()
+                fig_plataforma = px.pie(df_total_plataforma, values='Pontos', names='Origem', hole=0.5,
+                                        title="Histórico Geral: Bing vs Xbox (Todo o Tempo)",
+                                        color='Origem', color_discrete_map={'Bing':'#00a4ef', 'Xbox':'#107c10'})
+                st.plotly_chart(fig_plataforma, use_container_width=True)
                 
         with gcol2:
-            df_hoje_grafico = df_ganhos[df_ganhos['Data_Logica'] == hoje]
-            if not df_hoje_grafico.empty:
-                df_cat_hoje = df_hoje_grafico.groupby('Categoria')['Pontos'].sum().reset_index()
-                df_cat_hoje = df_cat_hoje[df_cat_hoje['Pontos'] > 0].sort_values(by='Pontos', ascending=True)
-                fig_hoje = px.bar(df_cat_hoje, x='Pontos', y='Categoria', orientation='h', 
-                                  title="Pontos Feitos Hoje", color_discrete_sequence=['#8a2be2'])
-                st.plotly_chart(fig_hoje, use_container_width=True)
-            else:
-                st.info("Nenhum ponto registrado hoje.")
+            # 1. Gráfico Mensal (Rosca) por Categoria
+            if not df_mes_atual.empty:
+                df_cat_mes = df_mes_atual[df_mes_atual['Categoria'].isin(CATEGORIAS)].groupby('Categoria')['Pontos'].sum().reset_index()
+                fig_cat_mes = px.pie(df_cat_mes, values='Pontos', names='Categoria', hole=0.5, title="Distribuição por Categoria (Mês Atual)")
+                st.plotly_chart(fig_cat_mes, use_container_width=True)
 
         st.divider()
-        if not df_mes_atual.empty:
-            df_mes_dia = df_mes_atual.groupby('Data_Logica')['Pontos'].sum().reset_index().sort_values('Data_Logica')
-            fig_evolucao = px.area(df_mes_dia, x='Data_Logica', y='Pontos', markers=True, 
-                                   title="Evolução Diária (Este Mês)", color_discrete_sequence=['#8a2be2'])
-            fig_evolucao.update_xaxes(title="Dia do Mês", tickformat="%d/%m")
-            st.plotly_chart(fig_evolucao, use_container_width=True)
+        
+        gcol3, gcol4 = st.columns(2)
+        with gcol3:
+            # 2. Gráfico de Barras com "Todo o Tempo" por Categoria
+            df_tudo_cat = df_ganhos[df_ganhos['Categoria'].isin(CATEGORIAS)].groupby('Categoria')['Pontos'].sum().reset_index().sort_values(by='Pontos', ascending=True)
+            fig_tudo_cat = px.bar(df_tudo_cat, x='Pontos', y='Categoria', orientation='h', title="Pontuação Histórica Total por Categoria", color_discrete_sequence=['#20b2aa'])
+            st.plotly_chart(fig_tudo_cat, use_container_width=True)
+            
+        with gcol4:
+            # Gráfico de evolução diária do mês corrente
+            if not df_mes_atual.empty:
+                df_mes_dia = df_mes_atual.groupby('Data_Logica')['Pontos'].sum().reset_index().sort_values('Data_Logica')
+                fig_evolucao = px.area(df_mes_dia, x='Data_Logica', y='Pontos', markers=True, title="Evolução Diária (Mês Atual)", color_discrete_sequence=['#8a2be2'])
+                fig_evolucao.update_xaxes(title="Dia", tickformat="%d/%m")
+                st.plotly_chart(fig_evolucao, use_container_width=True)
+
 # --- ABA 2: LANÇAR PONTOS ---
 with aba_lancar:
     st.subheader("Lançamento de Ganhos")
+    
+    # 8. Verificação e alerta de esquecimento do dia anterior
+    pontos_ontem_verif = df_ganhos[df_ganhos['Data_Logica'] == ontem]['Pontos'].sum()
+    data_destino_lancamento = hoje
+    
+    if pontos_ontem_verif == 0:
+        st.warning(f"⚠️ Alerta: Nenhum ponto encontrado registrado no dia anterior ({ontem.strftime('%d/%m/%Y')}).")
+        opcao_dia = st.radio("Para qual dia deseja efetuar este lançamento?", ["Hoje", "Dia Anterior (Ontem)"], horizontal=True)
+        if opcao_dia == "Dia Anterior (Ontem)":
+            data_destino_lancamento = ontem
+
     with st.form("form_ganhos"):
         valores_input = {}
-        dia_semana = hoje.weekday()
+        dia_semana = data_destino_lancamento.weekday()
         
+        sequencias_globais = {
+            "SERIE DE PESQUISA NO BING": [0, 3, 100],
+            "SERIE CONJUNTO DIARIO": [0, 30, 100],
+            "SERIE NAVEGAR NO EDGE": [0, 5, 10, 20, 30, 40, 80, 120],
+            "SERIE APLICATIVO BING": [0, 5, 10, 15, 50],
+            "ACESSAR APP XBOX": [0, 8, 16, 24, 32, 50]
+        }
+
         # --- SEÇÃO BING ---
         st.markdown("#### 🌐 Buscas e Painel Bing")
         cols_b = st.columns(3)
         for i, cat in enumerate(cat_bing):
             with cols_b[i % 3]:
                 if cat in sequencias_globais:
-                    valores_input[cat] = st.selectbox(cat, options=sequencias_globais[cat], key=f"b_{i}")
+                    valores_input[cat] = st.selectbox(cat, options=sequencias_globais[cat], key=f"b_{cat}")
                 else:
                     padrao = 0
                     if cat == "PESQUISAS BING": padrao = 57 
                     elif cat == "LER E GANHAR":
                         if dia_semana < 5: padrao = 25
                         elif dia_semana == 5: padrao = 5
-                    valores_input[cat] = st.number_input(cat, min_value=0, value=padrao, step=1, key=f"b_{i}")
+                    valores_input[cat] = st.number_input(cat, min_value=0, value=padrao, step=1, key=f"b_{cat}")
 
         st.divider()
         
@@ -214,16 +235,21 @@ with aba_lancar:
             if cat == "COMPRAR JOGOS": continue
             with cols_x[i % 3]:
                 if cat in sequencias_globais:
-                    valores_input[cat] = st.selectbox(cat, options=sequencias_globais[cat], key=f"x_{i}")
+                    valores_input[cat] = st.selectbox(cat, options=sequencias_globais[cat], key=f"x_{cat}")
                 else:
                     padrao = 0
                     if cat == "JOGAR JEWEL": padrao = 10
                     elif cat == "JOGAR NO CONSOLE": padrao = 20
                     elif cat == "JOGAR NO PC": padrao = 20
                     elif cat == "JOGAR UM JOGO DO XBOX GAME PASS": padrao = 20
-                    valores_input[cat] = st.number_input(cat, min_value=0, value=padrao, step=1, key=f"x_{i}")
+                    valores_input[cat] = st.number_input(cat, min_value=0, value=padrao, step=1, key=f"x_{cat}")
 
         st.divider()
+        st.markdown("#### 🎁 Bônus Especiais")
+        # 6. Bônus de sequência reestruturado para Checkbox de 0 ou 1000 pontos
+        chk_bonus = st.checkbox("Fiz o Bônus de Sequência (+1.000 pontos)", value=False)
+        valores_input["BONUS DE SEQUENCIA"] = 1000 if chk_bonus else 0
+
         st.markdown("#### 🛒 Compras na Loja")
         valor_gasto_jogos = st.number_input("Valor gasto em jogos na loja (R$) - Opcional", min_value=0.0, value=0.0, step=1.0)
         pontos_compra = int((valor_gasto_jogos / 3.0) * 20) if valor_gasto_jogos > 0 else 0
@@ -236,32 +262,34 @@ with aba_lancar:
             for cat, pts in valores_input.items():
                 if pts > 0:
                     novos_registros.append({
-                        'ID': str(uuid.uuid4()), 'Data_Hora': agora, 'Data_Logica': hoje,
+                        'ID': str(uuid.uuid4()), 'Data_Hora': agora, 'Data_Logica': data_destino_lancamento,
                         'Categoria': cat, 'Pontos': pts, 'Tipo': 'Ganho', 'Descricao': ''
                     })
             if novos_registros:
                 df = pd.concat([df, pd.DataFrame(novos_registros)], ignore_index=True)
                 salvar_dados(df)
-                enviar_notificacao_ntfy(f"Sucesso! {sum([r['Pontos'] for r in novos_registros])} pontos salvos.")
-                st.success("Salvo na nuvem!")
+                enviar_notificacao_ntfy(f"Sucesso! {sum([r['Pontos'] for r in novos_registros])} pontos salvos no dia {data_destino_lancamento.strftime('%d/%m')}.")
+                st.success("Salvo com sucesso!")
                 st.rerun()
+
+    if st.button("🔔 Testar Notificação Real no Celular"):
+        enviar_notificacao_ntfy("Sistema ativo e monitorando seus pontos!", "🎮 Alerta Microsoft Rewards")
+        st.success("Sinal enviado via NTFY com proteção contra quedas!")
 
 # --- ABA 3: EDITAR DIA ---
 with aba_editar:
     st.subheader("Editar Lançamentos de um Dia")
-    st.caption("Selecione um dia para carregar os pontos salvos. Modifique o que precisar e salve novamente para substituir o dia inteiro.")
     
-    # Filtra os dias que têm registros de ganhos dentro das categorias normais
     df_editavel = df[(df['Tipo'] == 'Ganho') & (df['Categoria'].isin(CATEGORIAS))].copy()
     dias_disponiveis = sorted(df_editavel['Data_Logica'].unique(), reverse=True)
     
     if not dias_disponiveis:
-        st.info("Nenhum dia com lançamentos detalhados encontrado.")
+        st.info("Nenhum dia para edição encontrado.")
     else:
-        dia_selecionado = st.selectbox("Selecione a data que deseja editar:", dias_disponiveis, 
-                                       format_func=lambda x: pd.to_datetime(x).strftime('%d/%m/%Y'))
+        # 5. Correção do estado de renderização do componente de seleção de data para carregar os dados certos
+        dia_selecionado = st.selectbox("Selecione a data que deseja alterar:", dias_disponiveis, 
+                                       format_func=lambda x: pd.to_datetime(x).strftime('%d/%m/%Y'), key="sb_data_edicao")
         
-        # Puxa os dados exatos do dia escolhido
         df_dia = df_editavel[df_editavel['Data_Logica'] == dia_selecionado]
         valores_atuais = dict(zip(df_dia['Categoria'], df_dia['Pontos']))
         
@@ -275,9 +303,9 @@ with aba_editar:
                     val_atual = int(valores_atuais.get(cat, 0))
                     if cat in sequencias_globais:
                         idx = sequencias_globais[cat].index(val_atual) if val_atual in sequencias_globais[cat] else 0
-                        valores_edit[cat] = st.selectbox(cat, options=sequencias_globais[cat], index=idx, key=f"eb_{i}")
+                        valores_edit[cat] = st.selectbox(cat, options=sequencias_globais[cat], index=idx, key=f"eb_{cat}")
                     else:
-                        valores_edit[cat] = st.number_input(cat, min_value=0, value=val_atual, step=1, key=f"eb_{i}")
+                        valores_edit[cat] = st.number_input(cat, min_value=0, value=val_atual, step=1, key=f"eb_{cat}")
             
             st.divider()
             st.markdown("#### 🎮 Aplicativo Xbox e Game Pass")
@@ -288,25 +316,28 @@ with aba_editar:
                     val_atual = int(valores_atuais.get(cat, 0))
                     if cat in sequencias_globais:
                         idx = sequencias_globais[cat].index(val_atual) if val_atual in sequencias_globais[cat] else 0
-                        valores_edit[cat] = st.selectbox(cat, options=sequencias_globais[cat], index=idx, key=f"ex_{i}")
+                        valores_edit[cat] = st.selectbox(cat, options=sequencias_globais[cat], index=idx, key=f"ex_{cat}")
                     else:
-                        valores_edit[cat] = st.number_input(cat, min_value=0, value=val_atual, step=1, key=f"ex_{i}")
+                        valores_edit[cat] = st.number_input(cat, min_value=0, value=val_atual, step=1, key=f"ex_{cat}")
 
             st.divider()
+            st.markdown("#### 🎁 Bônus Especiais")
+            val_seq_atual = int(valores_atuais.get("BONUS DE SEQUENCIA", 0))
+            chk_bonus_ed = st.checkbox("Fiz o Bônus de Sequência (+1.000 pontos)", value=(val_seq_atual == 1000), key="eb_bonus_seq")
+            valores_edit["BONUS DE SEQUENCIA"] = 1000 if chk_bonus_ed else 0
+
             st.markdown("#### 🛒 Compras na Loja (Edição Direta)")
             pts_compra_atual = int(valores_atuais.get("COMPRAR JOGOS", 0))
-            valores_edit["COMPRAR JOGOS"] = st.number_input("Pontos ganhos com compras", min_value=0, value=pts_compra_atual, step=1, key="e_compra")
+            valores_edit["COMPRAR JOGOS"] = st.number_input("Pontos ganhos com compras", min_value=0, value=pts_compra_atual, step=1, key="e_compra_games")
 
             submit_edit = st.form_submit_button("💾 Salvar Alterações do Dia", type="primary")
             
             if submit_edit:
-                # 1. Remove apenas os lançamentos de ganhos operacionais deste dia específico
                 condicao_manter = ~((df['Data_Logica'].astype(str) == str(dia_selecionado)) & 
                                     (df['Categoria'].isin(CATEGORIAS)) & 
                                     (df['Tipo'] == 'Ganho'))
                 df_atualizado = df[condicao_manter].copy()
                 
-                # 2. Insere os novos dados corrigidos
                 novos_registros_edit = []
                 for cat, pts in valores_edit.items():
                     if pts > 0:
@@ -319,7 +350,7 @@ with aba_editar:
                     df_atualizado = pd.concat([df_atualizado, pd.DataFrame(novos_registros_edit)], ignore_index=True)
                 
                 salvar_dados(df_atualizado)
-                st.success("O dia foi atualizado com sucesso!")
+                st.success("O dia selecionado foi totalmente reestruturado e salvo!")
                 st.rerun()
 
 # --- ABA 4: RESGATES ---
@@ -335,7 +366,7 @@ with aba_resgatar:
             }
             df = pd.concat([df, pd.DataFrame([novo_resgate])], ignore_index=True)
             salvar_dados(df)
-            enviar_notificacao_ntfy(f"Resgate: {pontos_resgatados} pontos.", "Recompensa!")
+            enviar_notificacao_ntfy(f"Resgate efetuado: {pontos_resgatados} pts para {descricao}.", "Recompensa!")
             st.success("Resgate salvo!")
             st.rerun()
 
@@ -344,7 +375,6 @@ with aba_historico:
     st.subheader("Resumo de Pontos por Dia")
     
     if not df.empty:
-        # Tabela limpa agrupada por dia
         df_historico_limpo = df[df['Tipo'] == 'Ganho'].groupby('Data_Logica')['Pontos'].sum().reset_index()
         df_historico_limpo.columns = ['Data', 'Total de Pontos']
         df_historico_limpo = df_historico_limpo.sort_values(by="Data", ascending=False)
