@@ -50,7 +50,7 @@ def obter_data_logica(dt):
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # ⚠️ COLE SUA URL AQUI DENTRO DAS ASPAS
-URL_PLANILHA = "COLE_AQUI_A_URL_DA_SUA_PLANILHA_DO_GOOGLE_DRIVE_COM_AS_ASPAS"
+URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1lKTGiEkDZBm4XoQuYFOwv3F5Si-DCvEv3At5Fyd4EDY/edit?gid=0#gid=0"
 
 def carregar_dados():
     try:
