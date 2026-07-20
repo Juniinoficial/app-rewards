@@ -159,14 +159,6 @@ with aba_resumo:
     
     st.divider()
     st.divider()
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Hoje", f"{pontos_hoje:,.0f}".replace(',','.'))
-    c2.metric("Ontem", f"{pontos_ontem:,.0f}".replace(',','.'))
-    c3.metric("Esta Semana", f"{pontos_semana:,.0f}".replace(',','.'))
-    c4.metric("Este Mês", f"{pontos_mes:,.0f}".replace(',','.'))
-    c5.metric("Este Ano", f"{pontos_ano:,.0f}".replace(',','.'))
-    
-    st.divider()
     meta_pontos = st.number_input("Definir Meta de Saldo (Pontos)", min_value=0, value=st.session_state.meta_pontos, step=1000, key="meta_input")
     st.session_state.meta_pontos = meta_pontos
     if meta_pontos > 0:
