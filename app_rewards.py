@@ -130,6 +130,35 @@ with aba_resumo:
     col3.metric("Gastos neste Mês", f"{gastos_mes:,.0f}".replace(',','.'))
 
     st.divider()
+
+    # --- LÓGICA DE PROJEÇÃO MATEMÁTICA ---
+    # Descobre o total de dias do mês atual (sem precisar de bibliotecas extras)
+    prox_mes = hoje.replace(day=28) + timedelta(days=4)
+    ultimo_dia_mes = prox_mes - timedelta(days=prox_mes.day)
+    dias_no_mes = ultimo_dia_mes.day
+    
+    # Calcula a projeção do Mês (Ritmo Diário x Total de Dias do Mês)
+    projecao_mes = (pontos_mes / hoje.day) * dias_no_mes if hoje.day > 0 else 0
+    
+    # Descobre o total de dias do ano atual (checa se é ano bissexto)
+    dia_do_ano = hoje.timetuple().tm_yday
+    bissexto = (hoje.year % 4 == 0 and hoje.year % 100 != 0) or (hoje.year % 400 == 0)
+    dias_no_ano = 366 if bissexto else 365
+    
+    # Calcula a projeção do Ano (Ritmo YTD x Total de Dias do Ano)
+    projecao_ano = (pontos_ano / dia_do_ano) * dias_no_ano if dia_do_ano > 0 else 0
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Hoje", f"{pontos_hoje:,.0f}".replace(',','.'))
+    c2.metric("Ontem", f"{pontos_ontem:,.0f}".replace(',','.'))
+    c3.metric("Esta Semana", f"{pontos_semana:,.0f}".replace(',','.'))
+    
+    # Injeta a projeção diretamente nas colunas 4 e 5 de forma elegante
+    c4.metric("Este Mês", f"{pontos_mes:,.0f}".replace(',','.'), delta=f"🎯 Proj: {projecao_mes:,.0f}".replace(',','.'), delta_color="off")
+    c5.metric("Este Ano", f"{pontos_ano:,.0f}".replace(',','.'), delta=f"🎯 Proj: {projecao_ano:,.0f}".replace(',','.'), delta_color="off")
+    
+    st.divider()
+    st.divider()
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Hoje", f"{pontos_hoje:,.0f}".replace(',','.'))
     c2.metric("Ontem", f"{pontos_ontem:,.0f}".replace(',','.'))
