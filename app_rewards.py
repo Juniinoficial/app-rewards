@@ -3,8 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import plotly.express as px
 import uuid
-import requests
-import time # <- Adicionado para dar a pausa do aviso verde de sucesso
+import time
 from streamlit_gsheets import GSheetsConnection
 
 # =====================================================================
@@ -13,7 +12,6 @@ from streamlit_gsheets import GSheetsConnection
 st.set_page_config(page_title="Gestão Microsoft Rewards", layout="wide", page_icon="🎮")
 
 TAXA_CONVERSAO = 172.1
-TOPICO_NTFY = "josimar_rewards_alert_99"
 
 cat_bing = [
     "BONUS BING STAR", "BONUS DE NIVEL",
@@ -78,20 +76,6 @@ def salvar_dados(df_novo):
      except Exception as e:
          st.error(f"Erro ao salvar no banco de dados: {e}")
 
-def enviar_notificacao_ntfy(mensagem, titulo="🎮 Microsoft Rewards"):
-    try:
-        requests.post(f"https://ntfy.sh/{TOPICO_NTFY}",
-            data=mensagem.encode('utf-8'),
-            headers={"Title": titulo, "Tags": "video_game,tada"},
-            timeout=5
-        )
-    except:
-        pass
-
-# INICIALIZAÇÃO DEFINITIVA DA META
-if "meta_pontos" not in st.session_state:
-    st.session_state.meta_pontos = 15000
-
 # Fuso horário de Brasília
 agora = datetime.utcnow() - timedelta(hours=3)
 hoje = obter_data_logica(agora)
@@ -149,10 +133,29 @@ with aba_resumo:
     
     st.divider()
 
-    # META 100% FUNCIONAL E PERSISTENTE
-    st.number_input("Definir Meta de Saldo (Pontos)", min_value=0, step=1000, key="meta_pontos")
-    if st.session_state.meta_pontos > 0:
-        progresso = min(saldo_atual / st.session_state.meta_pontos, 1.0)
+    # META 100% BLINDADA E SALVA NO BANCO DE DADOS
+    df_config = df[df['Tipo'] == 'Config']
+    meta_salva = int(df_config['Pontos'].iloc[-1]) if not df_config.empty else 15000
+
+    col_m1, col_m2 = st.columns([4, 1])
+    with col_m1:
+        nova_meta = st.number_input("Definir Meta de Saldo (Pontos)", min_value=0, value=meta_salva, step=1000)
+    with col_m2:
+        st.markdown("<div style='margin-top: 27px;'></div>", unsafe_allow_html=True)
+        if st.button("💾 Salvar Meta", use_container_width=True):
+            df_limpo = df[df['Tipo'] != 'Config'].copy() 
+            registro_meta = {
+                'ID': str(uuid.uuid4()), 'Data_Hora': agora, 'Data_Logica': hoje,
+                'Categoria': 'META_GLOBAL', 'Pontos': nova_meta, 'Tipo': 'Config', 'Descricao': 'Meta do Usuario'
+            }
+            df_final = pd.concat([df_limpo, pd.DataFrame([registro_meta])], ignore_index=True)
+            salvar_dados(df_final)
+            st.success("✅ Meta gravada na nuvem!")
+            time.sleep(1.5)
+            st.rerun()
+
+    if nova_meta > 0:
+        progresso = min(saldo_atual / nova_meta, 1.0)
         st.progress(progresso)
 
     st.divider()
@@ -272,16 +275,9 @@ with aba_lancar:
             if novos_registros:
                 df = pd.concat([df, pd.DataFrame(novos_registros)], ignore_index=True)
                 salvar_dados(df)
-                enviar_notificacao_ntfy(f"Sucesso! {sum([r['Pontos'] for r in novos_registros])} pontos salvos no dia {data_destino_lancamento.strftime('%d/%m')}.")
-                
-                # A mágica do botão que "espera" você ler antes de atualizar
-                st.success("✅ Pontos salvos com sucesso! O painel será atualizado em instantes...")
+                st.success("✅ Pontos salvos com sucesso! Atualizando painel...")
                 time.sleep(1.5)
                 st.rerun()
-
-    if st.button("🔔 Testar Notificação Real no Celular"):
-        enviar_notificacao_ntfy("Sistema ativo e monitorando seus pontos!", "🎮 Alerta Microsoft Rewards")
-        st.success("Sinal enviado via NTFY!")
 
 # --- ABA 3: EDITAR DIA ---
 with aba_editar:
@@ -299,7 +295,6 @@ with aba_editar:
         df_dia = df_editavel[df_editavel['Data_Logica'] == dia_selecionado]
         valores_atuais = dict(zip(df_dia['Categoria'], df_dia['Pontos']))
         
-        # A âncora dinâmica que força as caixinhas a puxarem os dados corretos do dia selecionado
         chave_data = dia_selecionado.strftime("%Y%m%d")
         
         with st.form("form_editar"):
@@ -376,7 +371,6 @@ with aba_resgatar:
             }
             df = pd.concat([df, pd.DataFrame([novo_resgate])], ignore_index=True)
             salvar_dados(df)
-            enviar_notificacao_ntfy(f"Resgate efetuado: {pontos_resgatados} pts para {descricao}.", "Recompensa!")
             st.success("✅ Resgate salvo com sucesso!")
             time.sleep(1.5)
             st.rerun()
