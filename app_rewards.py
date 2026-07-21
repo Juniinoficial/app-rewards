@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import plotly.express as px
 import uuid
 import requests
+import time # <- Adicionado para dar a pausa do aviso verde de sucesso
 from streamlit_gsheets import GSheetsConnection
 
 # =====================================================================
@@ -87,6 +88,7 @@ def enviar_notificacao_ntfy(mensagem, titulo="🎮 Microsoft Rewards"):
     except:
         pass
 
+# INICIALIZAÇÃO DEFINITIVA DA META
 if "meta_pontos" not in st.session_state:
     st.session_state.meta_pontos = 15000
 
@@ -121,7 +123,6 @@ with aba_resumo:
     pontos_ano = df_ganhos[df_ganhos['Data_Logica'] >= inicio_ano]['Pontos'].sum()
     gastos_mes = df_gastos[df_gastos['Data_Logica'] >= inicio_mes]['Pontos'].sum()
 
-    # Linha 1 de Métricas
     col1, col2, col3 = st.columns(3)
     col1.metric("Saldo Atual", f"{saldo_atual:,.0f}".replace(',','.'))
     col2.metric("Equivalente em R$", f"R$ {saldo_atual / TAXA_CONVERSAO:.2f}".replace('.',','))
@@ -129,7 +130,6 @@ with aba_resumo:
 
     st.divider()
 
-    # Projeção Matemática
     prox_mes = hoje.replace(day=28) + timedelta(days=4)
     ultimo_dia_mes = prox_mes - timedelta(days=prox_mes.day)
     dias_no_mes = ultimo_dia_mes.day
@@ -140,7 +140,6 @@ with aba_resumo:
     dias_no_ano = 366 if bissexto else 365
     projecao_ano = (pontos_ano / dia_do_ano) * dias_no_ano if dia_do_ano > 0 else 0
 
-    # Linha 2 de Métricas
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Hoje", f"{pontos_hoje:,.0f}".replace(',','.'))
     c2.metric("Ontem", f"{pontos_ontem:,.0f}".replace(',','.'))
@@ -150,10 +149,10 @@ with aba_resumo:
     
     st.divider()
 
-    meta_pontos = st.number_input("Definir Meta de Saldo (Pontos)", min_value=0, value=st.session_state.meta_pontos, step=1000, key="meta_input")
-    st.session_state.meta_pontos = meta_pontos
-    if meta_pontos > 0:
-        progresso = min(saldo_atual / meta_pontos, 1.0)
+    # META 100% FUNCIONAL E PERSISTENTE
+    st.number_input("Definir Meta de Saldo (Pontos)", min_value=0, step=1000, key="meta_pontos")
+    if st.session_state.meta_pontos > 0:
+        progresso = min(saldo_atual / st.session_state.meta_pontos, 1.0)
         st.progress(progresso)
 
     st.divider()
@@ -274,7 +273,10 @@ with aba_lancar:
                 df = pd.concat([df, pd.DataFrame(novos_registros)], ignore_index=True)
                 salvar_dados(df)
                 enviar_notificacao_ntfy(f"Sucesso! {sum([r['Pontos'] for r in novos_registros])} pontos salvos no dia {data_destino_lancamento.strftime('%d/%m')}.")
-                st.success("Salvo com sucesso!")
+                
+                # A mágica do botão que "espera" você ler antes de atualizar
+                st.success("✅ Pontos salvos com sucesso! O painel será atualizado em instantes...")
+                time.sleep(1.5)
                 st.rerun()
 
     if st.button("🔔 Testar Notificação Real no Celular"):
@@ -297,6 +299,9 @@ with aba_editar:
         df_dia = df_editavel[df_editavel['Data_Logica'] == dia_selecionado]
         valores_atuais = dict(zip(df_dia['Categoria'], df_dia['Pontos']))
         
+        # A âncora dinâmica que força as caixinhas a puxarem os dados corretos do dia selecionado
+        chave_data = dia_selecionado.strftime("%Y%m%d")
+        
         with st.form("form_editar"):
             valores_edit = {}
             
@@ -307,9 +312,9 @@ with aba_editar:
                     val_atual = int(valores_atuais.get(cat, 0))
                     if cat in sequencias_globais:
                         idx = sequencias_globais[cat].index(val_atual) if val_atual in sequencias_globais[cat] else 0
-                        valores_edit[cat] = st.selectbox(cat, options=sequencias_globais[cat], index=idx, key=f"eb_{cat}")
+                        valores_edit[cat] = st.selectbox(cat, options=sequencias_globais[cat], index=idx, key=f"eb_{cat}_{chave_data}")
                     else:
-                        valores_edit[cat] = st.number_input(cat, min_value=0, value=val_atual, step=1, key=f"eb_{cat}")
+                        valores_edit[cat] = st.number_input(cat, min_value=0, value=val_atual, step=1, key=f"eb_{cat}_{chave_data}")
             
             st.divider()
             st.markdown("#### 🎮 Aplicativo Xbox e Game Pass")
@@ -320,19 +325,19 @@ with aba_editar:
                     val_atual = int(valores_atuais.get(cat, 0))
                     if cat in sequencias_globais:
                         idx = sequencias_globais[cat].index(val_atual) if val_atual in sequencias_globais[cat] else 0
-                        valores_edit[cat] = st.selectbox(cat, options=sequencias_globais[cat], index=idx, key=f"ex_{cat}")
+                        valores_edit[cat] = st.selectbox(cat, options=sequencias_globais[cat], index=idx, key=f"ex_{cat}_{chave_data}")
                     else:
-                        valores_edit[cat] = st.number_input(cat, min_value=0, value=val_atual, step=1, key=f"ex_{cat}")
+                        valores_edit[cat] = st.number_input(cat, min_value=0, value=val_atual, step=1, key=f"ex_{cat}_{chave_data}")
 
             st.divider()
             st.markdown("#### 🎁 Bônus Especiais")
             val_seq_atual = int(valores_atuais.get("BONUS DE SEQUENCIA", 0))
-            chk_bonus_ed = st.checkbox("Fiz o Bônus de Sequência (+1.000 pontos)", value=(val_seq_atual == 1000), key="eb_bonus_seq")
+            chk_bonus_ed = st.checkbox("Fiz o Bônus de Sequência (+1.000 pontos)", value=(val_seq_atual == 1000), key=f"eb_bonus_seq_{chave_data}")
             valores_edit["BONUS DE SEQUENCIA"] = 1000 if chk_bonus_ed else 0
 
             st.markdown("#### 🛒 Compras na Loja (Edição Direta)")
             pts_compra_atual = int(valores_atuais.get("COMPRAR JOGOS", 0))
-            valores_edit["COMPRAR JOGOS"] = st.number_input("Pontos ganhos com compras", min_value=0, value=pts_compra_atual, step=1, key="e_compra_games")
+            valores_edit["COMPRAR JOGOS"] = st.number_input("Pontos ganhos com compras", min_value=0, value=pts_compra_atual, step=1, key=f"e_compra_games_{chave_data}")
 
             submit_edit = st.form_submit_button("💾 Salvar Alterações", type="primary")
             
@@ -354,7 +359,8 @@ with aba_editar:
                     df_atualizado = pd.concat([df_atualizado, pd.DataFrame(novos_registros_edit)], ignore_index=True)
                 
                 salvar_dados(df_atualizado)
-                st.success("O dia selecionado foi atualizado!")
+                st.success("✅ O dia selecionado foi atualizado com sucesso!")
+                time.sleep(1.5)
                 st.rerun()
 
 # --- ABA 4: RESGATES ---
@@ -371,7 +377,8 @@ with aba_resgatar:
             df = pd.concat([df, pd.DataFrame([novo_resgate])], ignore_index=True)
             salvar_dados(df)
             enviar_notificacao_ntfy(f"Resgate efetuado: {pontos_resgatados} pts para {descricao}.", "Recompensa!")
-            st.success("Resgate salvo!")
+            st.success("✅ Resgate salvo com sucesso!")
+            time.sleep(1.5)
             st.rerun()
 
 # --- ABA 5: HISTÓRICO ---
