@@ -230,7 +230,7 @@ with aba_lancar:
                 else:
                     padrao = 0
                     if cat == "PESQUISAS BING": padrao = 57 
-                    elif cat == "LER E GANHAR":
+                    elif cat == "ATIVIDADES":
                         if dia_semana < 5: padrao = 25
                         elif dia_semana == 5: padrao = 5
                     valores_input[cat] = st.number_input(cat, min_value=0, value=padrao, step=1, key=f"b_{cat}")
