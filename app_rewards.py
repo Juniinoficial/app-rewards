@@ -94,15 +94,25 @@ with aba_resumo:
 
     saldo_atual = df_ganhos['Pontos'].sum() - df_gastos['Pontos'].sum()
 
+    # Cálculo dos períodos
     ontem = hoje - timedelta(days=1)
+    
+    # Esta Semana
     dias_para_domingo = (hoje.weekday() + 1) % 7
     inicio_semana = hoje - timedelta(days=dias_para_domingo)
+    
+    # Semana Passada
+    inicio_semana_passada = inicio_semana - timedelta(days=7)
+    fim_semana_passada = inicio_semana - timedelta(days=1)
+    
     inicio_mes = hoje.replace(day=1)
     inicio_ano = hoje.replace(month=1, day=1)
 
+    # Agrupamento de pontos
     pontos_hoje = df_ganhos[df_ganhos['Data_Logica'] == hoje]['Pontos'].sum()
     pontos_ontem = df_ganhos[df_ganhos['Data_Logica'] == ontem]['Pontos'].sum()
     pontos_semana = df_ganhos[df_ganhos['Data_Logica'] >= inicio_semana]['Pontos'].sum()
+    pontos_semana_passada = df_ganhos[(df_ganhos['Data_Logica'] >= inicio_semana_passada) & (df_ganhos['Data_Logica'] <= fim_semana_passada)]['Pontos'].sum()
     pontos_mes = df_ganhos[df_ganhos['Data_Logica'] >= inicio_mes]['Pontos'].sum()
     pontos_ano = df_ganhos[df_ganhos['Data_Logica'] >= inicio_ano]['Pontos'].sum()
     gastos_mes = df_gastos[df_gastos['Data_Logica'] >= inicio_mes]['Pontos'].sum()
@@ -114,22 +124,31 @@ with aba_resumo:
 
     st.divider()
 
+    # --- PROJEÇÕES MATEMÁTICAS ---
+    # Projeção da Semana (7 dias)
+    dias_passados_semana = (hoje - inicio_semana).days + 1
+    projecao_semana = (pontos_semana / dias_passados_semana) * 7 if dias_passados_semana > 0 else 0
+
+    # Projeção do Mês
     prox_mes = hoje.replace(day=28) + timedelta(days=4)
     ultimo_dia_mes = prox_mes - timedelta(days=prox_mes.day)
     dias_no_mes = ultimo_dia_mes.day
     projecao_mes = (pontos_mes / hoje.day) * dias_no_mes if hoje.day > 0 else 0
     
+    # Projeção do Ano
     dia_do_ano = hoje.timetuple().tm_yday
     bissexto = (hoje.year % 4 == 0 and hoje.year % 100 != 0) or (hoje.year % 400 == 0)
     dias_no_ano = 366 if bissexto else 365
     projecao_ano = (pontos_ano / dia_do_ano) * dias_no_ano if dia_do_ano > 0 else 0
 
-    c1, c2, c3, c4, c5 = st.columns(5)
+    # Linha com 6 colunas incluindo a Semana Passada
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
     c1.metric("Hoje", f"{pontos_hoje:,.0f}".replace(',','.'))
     c2.metric("Ontem", f"{pontos_ontem:,.0f}".replace(',','.'))
-    c3.metric("Esta Semana", f"{pontos_semana:,.0f}".replace(',','.'))
-    c4.metric("Este Mês", f"{pontos_mes:,.0f}".replace(',','.'), delta=f"🎯 Proj: {projecao_mes:,.0f}".replace(',','.'), delta_color="off")
-    c5.metric("Este Ano", f"{pontos_ano:,.0f}".replace(',','.'), delta=f"🎯 Proj: {projecao_ano:,.0f}".replace(',','.'), delta_color="off")
+    c3.metric("Esta Semana", f"{pontos_semana:,.0f}".replace(',','.'), delta=f"🎯 Proj: {projecao_semana:,.0f}".replace(',','.'), delta_color="off")
+    c4.metric("Semana Passada", f"{pontos_semana_passada:,.0f}".replace(',','.'))
+    c5.metric("Este Mês", f"{pontos_mes:,.0f}".replace(',','.'), delta=f"🎯 Proj: {projecao_mes:,.0f}".replace(',','.'), delta_color="off")
+    c6.metric("Este Ano", f"{pontos_ano:,.0f}".replace(',','.'), delta=f"🎯 Proj: {projecao_ano:,.0f}".replace(',','.'), delta_color="off")
     
     st.divider()
 
@@ -211,6 +230,7 @@ with aba_lancar:
 
     with st.form("form_ganhos"):
         valores_input = {}
+        # 0 = Segunda, ..., 6 = Domingo
         dia_semana = data_destino_lancamento.weekday()
         
         sequencias_globais = {
@@ -230,7 +250,7 @@ with aba_lancar:
                 else:
                     padrao = 0
                     if cat == "PESQUISAS BING": padrao = 57 
-                    elif cat == "ATIVIDADES":
+                    elif cat == "ATIVIDADES":  # Ajustado conforme combinado
                         if dia_semana < 5: padrao = 25
                         elif dia_semana == 5: padrao = 5
                     valores_input[cat] = st.number_input(cat, min_value=0, value=padrao, step=1, key=f"b_{cat}")
@@ -250,6 +270,10 @@ with aba_lancar:
                     elif cat == "JOGAR NO CONSOLE": padrao = 20
                     elif cat == "JOGAR NO PC": padrao = 20
                     elif cat == "JOGAR UM JOGO DO XBOX GAME PASS": padrao = 20
+                    elif cat == "SEQUENCIA SEMANAL DO XBOX GAME PASS":
+                        # Regra do Domingo: Se for domingo (6), já puxa 700!
+                        if dia_semana == 6:
+                            padrao = 700
                     valores_input[cat] = st.number_input(cat, min_value=0, value=padrao, step=1, key=f"x_{cat}")
 
         st.divider()
