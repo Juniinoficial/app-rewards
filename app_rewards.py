@@ -124,7 +124,6 @@ with aba_resumo:
 
     st.divider()
 
-    # --- PROJEÇÕES MATEMÁTICAS ---
     # Projeção da Semana (7 dias)
     dias_passados_semana = (hoje - inicio_semana).days + 1
     projecao_semana = (pontos_semana / dias_passados_semana) * 7 if dias_passados_semana > 0 else 0
@@ -141,7 +140,6 @@ with aba_resumo:
     dias_no_ano = 366 if bissexto else 365
     projecao_ano = (pontos_ano / dia_do_ano) * dias_no_ano if dia_do_ano > 0 else 0
 
-    # Linha com 6 colunas incluindo a Semana Passada
     c1, c2, c3, c4, c5, c6 = st.columns(6)
     c1.metric("Hoje", f"{pontos_hoje:,.0f}".replace(',','.'))
     c2.metric("Ontem", f"{pontos_ontem:,.0f}".replace(',','.'))
@@ -152,7 +150,6 @@ with aba_resumo:
     
     st.divider()
 
-    # META 100% BLINDADA E SALVA NO BANCO DE DADOS
     df_config = df[df['Tipo'] == 'Config']
     meta_salva = int(df_config['Pontos'].iloc[-1]) if not df_config.empty else 15000
 
@@ -182,6 +179,7 @@ with aba_resumo:
     if not df_ganhos.empty:
         df_mes_atual = df_ganhos[df_ganhos['Data_Logica'] >= inicio_mes].copy()
         
+        # --- PRIMEIRA LINHA DE GRÁFICOS (PIZZAS) ---
         gcol1, gcol2 = st.columns(2)
         with gcol1:
             df_historico_plataforma = df_ganhos[df_ganhos['Categoria'].isin(CATEGORIAS)].copy()
@@ -201,11 +199,12 @@ with aba_resumo:
 
         st.divider()
         
+        # --- SEGUNDA LINHA DE GRÁFICOS (TODO O TEMPO / MÊS ATUAL DIÁRIO) ---
         gcol3, gcol4 = st.columns(2)
         with gcol3:
             df_tudo_cat = df_ganhos[df_ganhos['Categoria'].isin(CATEGORIAS)].groupby('Categoria')['Pontos'].sum().reset_index().sort_values(by='Pontos', ascending=True)
             if not df_tudo_cat.empty:
-                fig_tudo_cat = px.bar(df_tudo_cat, x='Pontos', y='Categoria', orientation='h', title="Pontuação Histórica Total por Categoria", color_discrete_sequence=['#20b2aa'])
+                fig_tudo_cat = px.bar(df_tudo_cat, x='Pontos', y='Categoria', orientation='h', title="Pontuação Histórica Total por Categoria (Todo o Tempo)", color_discrete_sequence=['#20b2aa'])
                 st.plotly_chart(fig_tudo_cat, use_container_width=True)
             
         with gcol4:
@@ -214,6 +213,28 @@ with aba_resumo:
                 fig_evolucao = px.area(df_mes_dia, x='Data_Logica', y='Pontos', markers=True, title="Evolução Diária (Mês Atual)", color_discrete_sequence=['#8a2be2'])
                 fig_evolucao.update_xaxes(title="Dia", tickformat="%d/%m")
                 st.plotly_chart(fig_evolucao, use_container_width=True)
+
+        st.divider()
+
+        # --- TERCEIRA LINHA DE GRÁFICOS (NOVOS) ---
+        gcol5, gcol6 = st.columns(2)
+        with gcol5:
+            if not df_mes_atual.empty:
+                df_cat_mes_bar = df_mes_atual[df_mes_atual['Categoria'].isin(CATEGORIAS)].groupby('Categoria')['Pontos'].sum().reset_index().sort_values(by='Pontos', ascending=True)
+                if not df_cat_mes_bar.empty:
+                    fig_cat_mes_bar = px.bar(df_cat_mes_bar, x='Pontos', y='Categoria', orientation='h', title="Pontuação por Categoria (Mês Atual)", color_discrete_sequence=['#1e90ff'])
+                    st.plotly_chart(fig_cat_mes_bar, use_container_width=True)
+        
+        with gcol6:
+            df_ano_atual = df_ganhos[df_ganhos['Data_Logica'] >= inicio_ano].copy()
+            if not df_ano_atual.empty:
+                # Transforma a data no primeiro dia de cada mês para agrupar corretamente
+                df_ano_atual['Mes_Data'] = pd.to_datetime(df_ano_atual['Data_Logica']).dt.to_period('M').dt.to_timestamp()
+                df_ano_mes = df_ano_atual.groupby('Mes_Data')['Pontos'].sum().reset_index().sort_values('Mes_Data')
+                
+                fig_evolucao_ano = px.area(df_ano_mes, x='Mes_Data', y='Pontos', markers=True, title="Evolução Anual (Mês a Mês)", color_discrete_sequence=['#ff4500'])
+                fig_evolucao_ano.update_xaxes(title="Mês", tickformat="%m/%Y")
+                st.plotly_chart(fig_evolucao_ano, use_container_width=True)
 
 # --- ABA 2: LANÇAR PONTOS ---
 with aba_lancar:
@@ -250,7 +271,7 @@ with aba_lancar:
                 else:
                     padrao = 0
                     if cat == "PESQUISAS BING": padrao = 57 
-                    elif cat == "ATIVIDADES":  # Ajustado conforme combinado
+                    elif cat == "ATIVIDADES":  # Ajustado
                         if dia_semana < 5: padrao = 25
                         elif dia_semana == 5: padrao = 5
                     valores_input[cat] = st.number_input(cat, min_value=0, value=padrao, step=1, key=f"b_{cat}")
@@ -271,7 +292,7 @@ with aba_lancar:
                     elif cat == "JOGAR NO PC": padrao = 20
                     elif cat == "JOGAR UM JOGO DO XBOX GAME PASS": padrao = 20
                     elif cat == "SEQUENCIA SEMANAL DO XBOX GAME PASS":
-                        # Regra do Domingo: Se for domingo (6), já puxa 700!
+                        # Regra do Domingo
                         if dia_semana == 6:
                             padrao = 700
                     valores_input[cat] = st.number_input(cat, min_value=0, value=padrao, step=1, key=f"x_{cat}")
